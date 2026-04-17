@@ -27,19 +27,7 @@ const DonatePage = ({ donations, requests, orders, selectedMarker, setSelectedMa
     }
   }, []);
 
-  // Auto-cleanup when an order gets delivered
-  useEffect(() => {
-    const justDelivered = orders.find(o =>
-      o.status === 'delivered' && showPayment?.id === o.id && o.isPaid
-    );
-    if (justDelivered) {
-      // Close payment modal with slight delay for smooth UX
-      setTimeout(() => {
-        setShowPayment(null);
-        setSelectedReceiver(null);
-      }, 800);
-    }
-  }, [orders, showPayment]);
+  // Remove auto-cleanup to allow user to manually dismiss success payment modal
 
   // Show user's own data if they have any, otherwise show all (for demo with seed data)
   const userDonations = user?.id ? donations.filter(d => d.userId === user.id) : [];
@@ -63,7 +51,8 @@ const DonatePage = ({ donations, requests, orders, selectedMarker, setSelectedMa
     const { routeCoordinates, distanceKm } = await fetchRoute(myDonation.location, confirmedItem.location);
     await createOrder({
       donation: myDonation, request: confirmedItem,
-      billingSplit: confirmedItem.billingSplit, routeCoordinates, distanceKm
+      billingSplit: confirmedItem.billingSplit, routeCoordinates, distanceKm,
+      initiatedBy: 'donor'
     });
     setSelectedReceiver(null);
   };

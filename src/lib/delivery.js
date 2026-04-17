@@ -28,8 +28,8 @@ export const VEHICLE_TYPES = {
 };
 
 const AGENT_NAMES = [
-  'Rahul Kumar', 'Priya Sharma', 'Arjun Singh', 'Sneha Patel',
-  'Vikram Reddy', 'Anjali Gupta', 'Karan Mehta', 'Deepa Nair'
+  'Karthik Sivakumar', 'Murugan', 'Arun Vijay', 'Suresh Kumar',
+  'Muthu', 'Dhanush', 'Raja', 'Anbu'
 ];
 
 export const assignVehicle = (servings) => {
@@ -63,10 +63,12 @@ export const estimateDeliveryTime = (vehicleType, distanceKm) => {
 
 export const generateDeliveryAgent = (vehicleType) => {
   const idx = Math.floor(Math.random() * AGENT_NAMES.length);
+  // TN RTO codes range from 01 to 99 roughly. Let's use 01 to 99
+  const rto = Math.floor(Math.random() * 99 + 1).toString().padStart(2, '0');
   return {
     name: AGENT_NAMES[idx],
     phone: `9${Math.floor(Math.random() * 9000000000 + 1000000000)}`,
-    vehicleNumber: `DL ${Math.floor(Math.random() * 90 + 10)} ${String.fromCharCode(65 + Math.floor(Math.random() * 26))}${String.fromCharCode(65 + Math.floor(Math.random() * 26))} ${Math.floor(Math.random() * 9000 + 1000)}`,
+    vehicleNumber: `TN ${rto} ${String.fromCharCode(65 + Math.floor(Math.random() * 26))}${String.fromCharCode(65 + Math.floor(Math.random() * 26))} ${Math.floor(Math.random() * 9000 + 1000)}`,
     rating: (4 + Math.random()).toFixed(1)
   };
 };

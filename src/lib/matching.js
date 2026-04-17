@@ -8,7 +8,7 @@ import { assignVehicle, calculateDeliveryFee, estimateDeliveryTime, generateDeli
  * Create an order after user manually selects a donor/receiver
  * Called from ConfirmOrderModal
  */
-export const createOrder = async ({ donation, request, billingSplit, routeCoordinates, distanceKm }) => {
+export const createOrder = async ({ donation, request, billingSplit, routeCoordinates, distanceKm, initiatedBy = 'donor' }) => {
   try {
     const qty = Number(donation.quantity || request.peopleCount || 10) || 10;
     const vehicle = assignVehicle(qty);
@@ -17,20 +17,20 @@ export const createOrder = async ({ donation, request, billingSplit, routeCoordi
     const eta = estimateDeliveryTime(vehicle, dist);
     const agent = generateDeliveryAgent(vehicle);
 
-    // Sanitize distanceKm to ensure it's a finite string
     const safeDistKm = Number.isFinite(Number(distanceKm)) ? distanceKm : '1.00';
+    const isReceiverInitiated = initiatedBy === 'receiver';
 
     const orderResult = await db.addDoc('orders', {
       donationId: donation.id,
       requestId: request.id,
-      status: 'confirmed',
+      status: isReceiverInitiated ? 'pending_donor_approval' : 'confirmed',
       vehicle: {
         id: vehicle.id, name: vehicle.name, emoji: vehicle.emoji,
         label: vehicle.label, color: vehicle.color
       },
       agent,
       billing,
-      billingSplit: billingSplit || 'donor',
+      billingSplit: isReceiverInitiated ? 'pending' : (billingSplit || 'donor'),
       etaMinutes: Number.isFinite(eta) ? eta : 15,
       distanceKm: safeDistKm,
       donorLocation: donation.location,
@@ -40,7 +40,7 @@ export const createOrder = async ({ donation, request, billingSplit, routeCoordi
       foodType: donation.foodType || 'Mixed',
       isPaid: false,
       statusHistory: [
-        { status: 'confirmed', timestamp: new Date().toISOString() }
+        { status: isReceiverInitiated ? 'pending_donor_approval' : 'confirmed', timestamp: new Date().toISOString() }
       ],
       deliveryProgress: 0
     });
@@ -49,8 +49,10 @@ export const createOrder = async ({ donation, request, billingSplit, routeCoordi
     await db.updateDoc('donations', donation.id, { matched: true, orderId: orderResult.id });
     await db.updateDoc('requests', request.id, { matched: true, orderId: orderResult.id });
 
-    // Start delivery simulation
-    simulateDelivery(orderResult.id);
+    // Only simulate delivery immediately if donor initiated it or we otherwise have immediate confirmation
+    if (!isReceiverInitiated) {
+      simulateDelivery(orderResult.id);
+    }
 
     return orderResult.id;
   } catch (error) {
@@ -58,6 +60,20 @@ export const createOrder = async ({ donation, request, billingSplit, routeCoordi
     alert('Order creation failed: ' + error.message);
     throw error;
   }
+};
+
+export const approveOrder = async (orderId, chosenBillingSplit) => {
+  const order = await db.getDoc('orders', orderId);
+  if (!order) return;
+  
+  const history = [...(order.statusHistory || []), { status: 'confirmed', timestamp: new Date().toISOString() }];
+  await db.updateDoc('orders', orderId, { 
+    status: 'confirmed', 
+    billingSplit: chosenBillingSplit,
+    statusHistory: history 
+  });
+  
+  simulateDelivery(orderId);
 };
 
 /**

@@ -2,13 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { ORDER_STATUSES, getStatusIndex } from '../lib/delivery';
 import { Phone, Star, Send, Heart } from 'lucide-react';
 import { db } from '../lib/firebase';
+import { approveOrder } from '../lib/matching';
 
-const InlineTracker = ({ order, onPayNow, viewSide }) => {
-  // viewSide: 'donor' or 'receiver' — determines what UI to show
+const InlineTracker = ({ order, onPay, isDonorSide }) => {
+  const viewSide = isDonorSide ? 'donor' : 'receiver'; // Determines what UI to show
   const [elapsed, setElapsed] = useState(0);
   const [thankYouNote, setThankYouNote] = useState('');
   const [thankYouSent, setThankYouSent] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const [pendingSplit, setPendingSplit] = useState('donor');
+  const [approving, setApproving] = useState(false);
 
   useEffect(() => {
     if (!order || order.status === 'delivered') return;
@@ -30,10 +33,15 @@ const InlineTracker = ({ order, onPayNow, viewSide }) => {
       }
 
       let duration = 0;
+      const iNeedToPay = (viewSide === 'donor' && order?.billingSplit === 'donor') || 
+                         (viewSide === 'receiver' && order?.billingSplit === 'receiver');
+
       if (order?.isPaid) {
         duration = 8000;
       } else if (order?.billingSplit === 'donor' && viewSide === 'receiver') {
         duration = 12000;
+      } else if (!iNeedToPay) {
+        duration = 10000;
       }
       
       if (duration > 0) {
@@ -55,6 +63,64 @@ const InlineTracker = ({ order, onPayNow, viewSide }) => {
   }, [order?.status, order?.isPaid, order?.billingSplit, viewSide, order?.trackerDismissed, order?.id]);
 
   if (!order || dismissed) return null;
+
+  if (order.status === 'pending_donor_approval') {
+    if (viewSide === 'receiver') {
+      return (
+        <div className="inline-tracker" style={{ padding: '1.5rem', textAlign: 'center' }}>
+          <div className="tracker-bar-title" style={{ color: 'var(--color-text-secondary)' }}>
+            ⏳ Waiting for donor to approve the request<br/>and choose a billing split...
+          </div>
+        </div>
+      );
+    } else {
+      return (
+        <div className="inline-tracker" style={{ padding: '1.25rem' }}>
+          <div className="tracker-bar-title" style={{ marginBottom: '1rem', color: 'var(--neon-green)' }}>
+            New Request! A receiver wants your food.
+          </div>
+          <label className="form-label">Who pays for delivery? (₹{order.billing?.total || 0})</label>
+          <div className="modal-split-options" style={{ marginTop: '0.75rem', marginBottom: '1rem' }}>
+            <button
+              className={`modal-split-btn ${pendingSplit === 'donor' ? 'active' : ''}`}
+              onClick={() => setPendingSplit('donor')}
+            >
+              <div className="modal-split-row">
+                <span className="modal-split-icon">🎁</span>
+                <div>
+                  <span className="modal-split-label">I'll pay</span>
+                  <span className="modal-split-desc">Receiver gets food for free</span>
+                </div>
+              </div>
+            </button>
+            <button
+              className={`modal-split-btn ${pendingSplit === 'receiver' ? 'active' : ''}`}
+              onClick={() => setPendingSplit('receiver')}
+            >
+              <div className="modal-split-row">
+                <span className="modal-split-icon">💳</span>
+                <div>
+                  <span className="modal-split-label">Receiver pays</span>
+                  <span className="modal-split-desc">Delivery cost charged to receiver</span>
+                </div>
+              </div>
+            </button>
+          </div>
+          <button 
+            className="modal-confirm-btn" 
+            onClick={() => {
+              setApproving(true);
+              approveOrder(order.id, pendingSplit).finally(() => setApproving(false));
+            }}
+            disabled={approving}
+            style={{ width: '100%', display: 'flex', justifyContent: 'center' }}
+          >
+            <span>{approving ? 'Approving...' : 'Confirm & Dispatch'}</span>
+          </button>
+        </div>
+      );
+    }
+  }
 
   const currentIdx = getStatusIndex(order.status);
   const { agent, vehicle, etaMinutes } = order;
@@ -177,7 +243,7 @@ const InlineTracker = ({ order, onPayNow, viewSide }) => {
               {donorPays ? 'You chose to pay' : 'Delivery fee'}
             </div>
           </div>
-          <button className="tracker-pay-btn" onClick={() => onPayNow && onPayNow(order)}>
+          <button className="tracker-pay-btn" onClick={() => onPay && onPay(order)}>
             💳 Pay ₹{order.billing.total}
           </button>
         </div>
